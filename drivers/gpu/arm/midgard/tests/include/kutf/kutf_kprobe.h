@@ -32,4 +32,6 @@ typedef void (*kutf_kp_handler)(int argc, char **argv);
 void kutf_kp_sample_handler(int argc, char **argv);
 void kutf_kp_sample_kernel_function(void);
 
+void kutf_kp_delay_handler(int argc, char **argv);
+
 #endif /* _KUTF_KPROBE_H_ */
