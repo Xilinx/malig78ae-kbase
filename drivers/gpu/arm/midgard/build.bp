@@ -68,6 +68,11 @@ bob_defaults {
     mali_real_hw: {
         kbuild_options: ["CONFIG_MALI_REAL_HW=y"],
     },
+    mali_trace_power_gpu_work_period: {
+        kbuild_options: [
+            "CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD=y",
+        ],
+    },
     mali_debug: {
         kbuild_options: [
             "CONFIG_MALI_DEBUG=y",
