@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 #
-# (C) COPYRIGHT 2023 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2023-2025 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -19,39 +19,76 @@
 #
 
 load(
-    "//build/kernel/kleaf:kernel.bzl",
-    "kernel_module",
+    "@kleaf//build/kernel/kleaf:kernel.bzl",
+    "ddk_headers",
+    "ddk_module",
+    "kernel_module_group",
+)
+load("//config:cflags.bzl", "CFLAGS_MODULE")
+
+package(
+    default_visibility = [
+        "//:__subpackages__",
+        "@kleaf//common:__pkg__",
+    ],
+)
+
+ddk_headers(
+    name = "mali_kernel_headers",
+    hdrs = [
+        "//:kernel_headers",
+        "@kleaf//common:all_headers",
+    ],
+)
+
+kernel_module_group(
+    name = "base",
+    srcs = [
+               ":memory_group_manager",
+           ] +
+           select({
+               "//config:dma_shared_buffer": [
+                   ":dma-buf-test-exporter",
+               ],
+               "//conditions:default": [],
+           }),
 )
 
 filegroup(
     name = "base_kconfig",
-    srcs = glob([
-        "**/*Kconfig",
-    ]),
-    visibility = [
-        "//common:__pkg__",
-        "//common-modules/mali:__subpackages__",
-    ],
+    srcs = ["Kconfig"],
 )
 
-_base_modules = []
-
-kernel_module(
-    name = "base",
-    srcs = glob([
-        "**/*.c",
-        "**/*.h",
-        "**/*.S",
-        "**/*Kbuild",
-        "**/*Makefile",
-    ]) + [
-        "//common:kernel_headers",
-        "//common-modules/mali:headers",
-    ],
-    outs = _base_modules,
-    kernel_build = "//common:kernel_aarch64",
-    visibility = [
-        "//common:__pkg__",
-        "//common-modules/mali:__subpackages__",
-    ],
+ddk_module(
+    name = "dma-buf-test-exporter",
+    srcs = glob(["dma_buf_test_exporter/*.c"]),
+    out = "dma-buf-test-exporter.ko",
+    hdrs = [":mali_kernel_headers"],
+    copts = CFLAGS_MODULE,
+    defconfig = "//config/fragment:base_defconfig",
+    kconfig = ":base_kconfig",
+    kernel_build = "@kleaf//common:kernel",
 )
+
+ddk_module(
+    name = "memory_group_manager",
+    srcs = glob(["memory_group_manager/*.c"]),
+    out = "memory_group_manager.ko",
+    hdrs = [":mali_kernel_headers"],
+    copts = CFLAGS_MODULE,
+    defconfig = "//config/fragment:base_defconfig",
+    kconfig = ":base_kconfig",
+    kernel_build = "@kleaf//common:kernel",
+)
+
+ddk_module(
+    name = "protected_memory_allocator",
+    srcs = glob(["protected_memory_allocator/*.c"]),
+    out = "protected_memory_allocator.ko",
+    hdrs = [":mali_kernel_headers"],
+    copts = CFLAGS_MODULE,
+    defconfig = "//config/fragment:base_defconfig",
+    kconfig = ":base_kconfig",
+    kernel_build = "@kleaf//common:kernel",
+)
+

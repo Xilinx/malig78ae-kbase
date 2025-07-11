@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2019-2024 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2019-2023 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -35,20 +35,9 @@ typedef int vm_fault_t;
 #define PTE_PBHA_SHIFT (59)
 #define PTE_PBHA_MASK ((uint64_t)0xf << PTE_PBHA_SHIFT)
 #define PTE_RES_BIT_MULTI_AS_SHIFT (63)
-#define PTE_FLAGS_NONE (0)
-#define PBHA_ID_DEFAULT (0)
 
 struct memory_group_manager_device;
 struct memory_group_manager_import_data;
-
-/**
- * enum mgm_pte_flags - Memory Group Manager PTE Flags
- * @MMA_VIOLATION:   Bit-number of flag used to indicate that Mismatched Memory Attributes (MMA)
- *                   exist for a page. Specifically, this means CPU-uncached, GPU-cached.
- */
-enum mgm_pte_flags {
-	MMA_VIOLATION = 0,
-};
 
 /**
  * struct memory_group_manager_ops - Callbacks for memory group manager
@@ -61,8 +50,6 @@ enum mgm_pte_flags {
  * @mgm_pte_to_original_pte:  Callback to get the original PTE entry as given
  *                            to mgm_update_gpu_pte
  * @mgm_vmf_insert_pfn_prot:  Callback to map a physical memory page for the CPU
- * @mgm_get_import_memory_cached_access_permitted: Callback to query if a given imported
- *                            memory is allowed to be accessed as cached or not by the GPU
  */
 struct memory_group_manager_ops {
 	/*
@@ -132,34 +119,22 @@ struct memory_group_manager_ops {
 	 * @group_id:  A physical memory group ID. The meaning of this is
 	 *             defined by the systems integrator. Its valid range is
 	 *             0 .. MEMORY_GROUP_MANAGER_NR_GROUPS-1.
-	 *
-	 * @pbha_id:   PBHA Overrride ID to encode into the PTE
-	 * @pte_flags: PTE related flags, defined in enum mgm_pte_flags
-	 *
-	 *
 	 * @mmu_level: The level of the page table entry in @ate.
 	 * @pte:       The page table entry to modify, in LPAE or AArch64 format
 	 *             (depending on the driver's configuration). This should be
 	 *             decoded to determine the physical address and any other
 	 *             properties of the mapping the manager requires.
 	 *
-	 * This function allows the memory group manager to modify a GPU page table entry before it
-	 * is stored by the kbase module (controller driver). It may set certain bits in the page
-	 * table entry attributes or modify the physical address, based on the physical memory
-	 * group ID, PBHA ID, PTE flags and/or additional data in
-	 * struct memory_group_manager_device.
-	 *
-	 * If mgm_pte_flags has the MMA_VIOLATION bit set - ie, 1<<MMA_VIOLATION, the system
-	 * integrator may decide to encode the pbha_id into the PTE if (and only if) the
-	 * NONCACHEABLE SYSC_PHBA_OVERRIDE is required.The sample implementation in
-	 * example_mgm_pte_to_original_pte() does enable this, but implementors may choose not to
-	 * do so.
+	 * This function allows the memory group manager to modify a GPU page
+	 * table entry before it is stored by the kbase module (controller
+	 * driver). It may set certain bits in the page table entry attributes
+	 * or modify the physical address, based on the physical memory group ID
+	 * and/or additional data in struct memory_group_manager_device.
 	 *
 	 * Return: A modified GPU page table entry to be stored in a page table.
 	 */
 	u64 (*mgm_update_gpu_pte)(struct memory_group_manager_device *mgm_dev,
-				  unsigned int group_id, unsigned int pbha_id,
-				  unsigned int pte_flags, int mmu_level, u64 pte);
+				  unsigned int group_id, int mmu_level, u64 pte);
 
 	/*
 	 * mgm_pte_to_original_pte - Undo any modification done during mgm_update_gpu_pte()
@@ -207,20 +182,6 @@ struct memory_group_manager_ops {
 					      unsigned int group_id, struct vm_area_struct *vma,
 					      unsigned long addr, unsigned long pfn,
 					      pgprot_t pgprot);
-
-	/*
-	 * mgm_get_import_memory_cached_access_permitted - Check if the externally visible accesses
-	 *		by the GPU to the given imported memory are allowed to be cached or not.
-	 *
-	 * @mgm_dev:     The memory group manager through which the request
-	 *               is being made.
-	 * @import_data: Pointer to the data which describes imported memory.
-	 *
-	 * Return: true if cached access is permitted, false otherwise
-	 */
-	bool (*mgm_get_import_memory_cached_access_permitted)(
-		struct memory_group_manager_device *mgm_dev,
-		struct memory_group_manager_import_data *import_data);
 };
 
 /**

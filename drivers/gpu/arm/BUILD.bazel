@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 #
-# (C) COPYRIGHT 2023 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2023-2025 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -19,42 +19,47 @@
 #
 
 load(
-    "//build/kernel/kleaf:kernel.bzl",
-    "kernel_module",
+    "@kleaf//build/kernel/kleaf:kernel.bzl",
+    "ddk_headers",
+    "kernel_module_group",
+)
+
+package(
+    default_visibility = [
+        "//:__subpackages__",
+        "@kleaf//common:__pkg__",
+    ],
+)
+
+ddk_headers(
+    name = "mali_arbitration_shared_config_defaults",
+    includes = [
+        "midgard",
+        ".",
+    ] + select({
+        "//config:mali_arbitration": ["arbitration"],
+        "//conditions:default": [],
+    }),
 )
 
 filegroup(
     name = "gpu_kconfig",
-    srcs = glob([
-        "**/*Kconfig",
-    ]),
-    visibility = [
-        "//common:__pkg__",
-        "//common-modules/mali:__subpackages__",
-    ],
+    srcs = [
+        "//drivers/gpu/arm/midgard:midgard_kconfig",
+    ] + select({
+        "//config:mali_arbitration": ["//drivers/gpu/arm/arbitration:arbitration_kconfig"],
+        "//conditions:default": [],
+    }),
 )
 
-_gpu_modules = []
-
-kernel_module(
+kernel_module_group(
     name = "gpu",
-    srcs = glob([
-        "**/*.c",
-        "**/*.h",
-        "**/*.S",
-        "**/*Kbuild",
-        "**/*Makefile",
-    ]) + [
-        "//common:kernel_headers",
-        "//common-modules/mali:headers",
-    ],
-    outs = _gpu_modules,
-    kernel_build = "//common:kernel_aarch64",
-    visibility = [
-        "//common:__pkg__",
-        "//common-modules/mali:__subpackages__",
-    ],
-    deps = [
-        "//common-modules/mali/drivers/base/arm:base",
-    ],
+    srcs = ["//drivers/gpu/arm/midgard:mali_kbase"] +
+           select({
+               "//config:mali_arbitration": ["//drivers/gpu/arm/arbitration:arbitration"],
+               "//conditions:default": [],
+           }) + select({
+        "//config:mali_expert_debug": ["//drivers/gpu/arm/midgard/tests:mali_kutf_tests"],
+        "//conditions:default": [],
+    }),
 )

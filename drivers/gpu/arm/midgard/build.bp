@@ -50,6 +50,9 @@ bob_defaults {
     mali_midgard_enable_trace: {
         kbuild_options: ["CONFIG_MALI_MIDGARD_ENABLE_TRACE=y"],
     },
+    mali_arbiter_support: {
+        kbuild_options: ["CONFIG_MALI_ARBITER_SUPPORT=y"],
+    },
     mali_dma_buf_map_on_demand: {
         kbuild_options: ["CONFIG_MALI_DMA_BUF_MAP_ON_DEMAND=y"],
     },
@@ -80,6 +83,9 @@ bob_defaults {
     cinstr_vector_dump: {
         kbuild_options: ["CONFIG_MALI_VECTOR_DUMP=y"],
     },
+    cinstr_gwt: {
+        kbuild_options: ["CONFIG_MALI_CINSTR_GWT=y"],
+    },
     cinstr_primary_hwc: {
         kbuild_options: ["CONFIG_MALI_PRFCNT_SET_PRIMARY=y"],
     },
@@ -95,11 +101,17 @@ bob_defaults {
     mali_job_dump: {
         kbuild_options: ["CONFIG_MALI_JOB_DUMP"],
     },
+    mali_pwrsoft_765: {
+        kbuild_options: ["CONFIG_MALI_PWRSOFT_765=y"],
+    },
     mali_hw_errata_1485982_not_affected: {
         kbuild_options: ["CONFIG_MALI_HW_ERRATA_1485982_NOT_AFFECTED=y"],
     },
     mali_hw_errata_1485982_use_clock_alternative: {
         kbuild_options: ["CONFIG_MALI_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE=y"],
+    },
+    mali_is_fpga: {
+        kbuild_options: ["CONFIG_MALI_IS_FPGA=y"],
     },
     mali_coresight: {
         kbuild_options: ["CONFIG_MALI_CORESIGHT=y"],
@@ -117,6 +129,7 @@ bob_defaults {
         "CONFIG_MALI_PLATFORM_NAME={{.mali_platform_name}}",
         "MALI_CUSTOMER_RELEASE={{.release}}",
         "MALI_UNIT_TEST={{.unit_test_code}}",
+        "MALI_USE_CSF={{.gpu_has_csf}}",
         "MALI_JIT_PRESSURE_LIMIT_BASE={{.jit_pressure_limit_base}}",
 
         // Start of CS experimental features definitions.
@@ -132,6 +145,7 @@ bob_defaults {
         // is an umbrella feature that would be open for inappropriate use
         // (catch-all for experimental CS code without separating it into
         // different features).
+        "MALI_BASE_CSF_PERFORMANCE_TESTS={{.base_csf_performance_tests}}",
     ],
 }
 
@@ -144,9 +158,6 @@ bob_kernel_module {
         "*.c",
         "*.h",
         "Kbuild",
-        "arbiter/*.c",
-        "arbiter/*.h",
-        "arbiter/Kbuild",
         "backend/gpu/*.c",
         "backend/gpu/*.h",
         "backend/gpu/Kbuild",
@@ -240,6 +251,13 @@ bob_kernel_module {
             "mmu/backend/*_csf.h",
             "ipa/backend/*_csf.c",
             "ipa/backend/*_csf.h",
+        ],
+    },
+    mali_arbiter_support: {
+        srcs: [
+            "arbiter/*.c",
+            "arbiter/*.h",
+            "arbiter/Kbuild",
         ],
     },
     kbuild_options: [
