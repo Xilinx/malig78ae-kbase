@@ -25,6 +25,11 @@
 #include <linux/platform_device.h>
 #include <linux/version.h>
 #include <linux/module.h>
+#include <linux/spinlock.h>
+#include <linux/dma-mapping.h>
+#include <linux/hashtable.h>
+#include <linux/atomic.h>
+
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 #include <linux/debugfs.h>
 #include <linux/version_compat_defs.h>
@@ -35,6 +40,16 @@
 #ifndef CSTD_UNUSED
 #define CSTD_UNUSED(x) ((void)(x))
 #endif
+
+struct dma_page_map {
+	unsigned long pfn;
+	dma_addr_t dma_handle;
+	struct hlist_node node;
+};
+
+DEFINE_HASHTABLE(dma_page_table, 12);
+static DEFINE_SPINLOCK(dma_page_lock);
+static atomic_t dma_map_count = ATOMIC_INIT(0);
 
 #if (KERNEL_VERSION(4, 20, 0) > LINUX_VERSION_CODE)
 static inline vm_fault_t vmf_insert_pfn_prot(struct vm_area_struct *vma, unsigned long addr,
@@ -239,12 +254,115 @@ static void update_size(struct memory_group_manager_device *mgm_dev, unsigned in
 	}
 }
 
+/* Initialize mapping */
+static void init_page_dma_mapping(void)
+{
+	hash_init(dma_page_table);
+	atomic_set(&dma_map_count, 0);
+	pr_info("DMA page mapping table initialized.\n");
+}
+
+/* Add mapping */
+static int add_page_dma_mapping(struct page *page, dma_addr_t dma_handle)
+{
+	struct dma_page_map *entry, *tmp;
+	unsigned long pfn = page_to_pfn(page);
+	unsigned long flags;
+
+	spin_lock_irqsave(&dma_page_lock, flags);
+
+	/* Check for existing mapping */
+	hash_for_each_possible(dma_page_table, tmp, node, pfn) {
+		if (tmp->pfn == pfn) {
+			spin_unlock_irqrestore(&dma_page_lock, flags);
+			pr_info("DMA mapping exist \n");
+			return -EEXIST;
+		}
+	}
+
+	entry = kmalloc(sizeof(*entry), GFP_ATOMIC);
+	if (!entry) {
+		spin_unlock_irqrestore(&dma_page_lock, flags);
+		return -ENOMEM;
+	}
+
+	entry->pfn = pfn;
+	entry->dma_handle = dma_handle;
+	hash_add(dma_page_table, &entry->node, pfn);
+	atomic_inc(&dma_map_count);
+
+	spin_unlock_irqrestore(&dma_page_lock, flags);
+	return 0;
+}
+
+/* Find mapping */
+static int lookup_page_dma_handle(struct page *page, dma_addr_t *dma_handle)
+{
+	struct dma_page_map *entry;
+	unsigned long pfn = page_to_pfn(page);
+	unsigned long flags;
+
+	spin_lock_irqsave(&dma_page_lock, flags);
+	hash_for_each_possible(dma_page_table, entry, node, pfn) {
+		if (entry->pfn == pfn) {
+			*dma_handle = entry->dma_handle;
+			spin_unlock_irqrestore(&dma_page_lock, flags);
+			return 0;
+		}
+	}
+	spin_unlock_irqrestore(&dma_page_lock, flags);
+	return -ENOENT;
+}
+
+/* Delete mapping */
+static int remove_page_dma_mapping(struct page *page)
+{
+	struct dma_page_map *entry;
+	unsigned long pfn = page_to_pfn(page);
+	unsigned long flags;
+
+	spin_lock_irqsave(&dma_page_lock, flags);
+	hash_for_each_possible(dma_page_table, entry, node, pfn) {
+		if (entry->pfn == pfn) {
+			hash_del(&entry->node);
+			kfree(entry);
+			entry = NULL;
+			atomic_dec(&dma_map_count);
+			spin_unlock_irqrestore(&dma_page_lock, flags);
+			return 0;
+		}
+	}
+	spin_unlock_irqrestore(&dma_page_lock, flags);
+
+	return -ENOENT;
+}
+
+/* Cleanup all mappings on driver unload */
+static void cleanup_page_dma_mapping(void)
+{
+	struct dma_page_map *entry;
+	struct hlist_node *tmp;
+	unsigned long flags;
+	int bkt;
+
+	spin_lock_irqsave(&dma_page_lock, flags);
+	hash_for_each_safe(dma_page_table, bkt, tmp, entry, node) {
+		hash_del(&entry->node);
+		kfree(entry);
+	}
+	atomic_set(&dma_map_count, 0);
+	spin_unlock_irqrestore(&dma_page_lock, flags);
+}
+
 static struct page *example_mgm_alloc_page(struct memory_group_manager_device *mgm_dev,
 					   unsigned int group_id, gfp_t gfp_mask,
 					   unsigned int order)
 {
 	struct mgm_groups *const data = mgm_dev->data;
 	struct page *p;
+	dma_addr_t dma_handle = 0xFFFFFFFFFF;
+	size_t size = PAGE_SIZE << order;
+	int ret = 0;
 
 	dev_dbg(data->dev, "%s(mgm_dev=%pK, group_id=%u gfp_mask=0x%x order=%u\n", __func__,
 		(void *)mgm_dev, group_id, gfp_mask, order);
@@ -252,14 +370,21 @@ static struct page *example_mgm_alloc_page(struct memory_group_manager_device *m
 	if (WARN_ON(group_id >= MEMORY_GROUP_MANAGER_NR_GROUPS))
 		return NULL;
 
-	p = alloc_pages(gfp_mask, order);
+	gfp_mask &= ~(GFP_HIGHUSER_MOVABLE | GFP_HIGHUSER);
+
+	p = dma_alloc_pages(data->dev, size, &dma_handle, DMA_BIDIRECTIONAL, gfp_mask);
 
 	if (p) {
+		ret = add_page_dma_mapping(p, dma_handle);
+		if (ret) {
+			dev_err(data->dev, "Fail to store dma_handle for page %p \n",p);
+			dma_free_pages(data->dev, size, p, dma_handle, DMA_BIDIRECTIONAL);
+			return NULL;
+		}
 		update_size(mgm_dev, group_id, order, true);
 	} else {
 		struct mgm_groups *data = mgm_dev->data;
-
-		dev_dbg(data->dev, "alloc_pages failed\n");
+		dev_dbg(data->dev, "dma_alloc_pages failed\n");
 	}
 
 	return p;
@@ -269,6 +394,9 @@ static void example_mgm_free_page(struct memory_group_manager_device *mgm_dev,
 				  unsigned int group_id, struct page *page, unsigned int order)
 {
 	struct mgm_groups *const data = mgm_dev->data;
+	size_t size = PAGE_SIZE << order;
+	dma_addr_t dma_handle = 0;
+	int ret = 0;
 
 	dev_dbg(data->dev, "%s(mgm_dev=%pK, group_id=%u page=%pK order=%u\n", __func__,
 		(void *)mgm_dev, group_id, (void *)page, order);
@@ -276,7 +404,14 @@ static void example_mgm_free_page(struct memory_group_manager_device *mgm_dev,
 	if (WARN_ON(group_id >= MEMORY_GROUP_MANAGER_NR_GROUPS))
 		return;
 
-	__free_pages(page, order);
+	ret = lookup_page_dma_handle(page, &dma_handle);
+	if (ret) {
+		dev_err(data->dev, "No dma_handle found for page %p\n", page);
+		return;
+	}
+
+	dma_free_pages(data->dev, size, page, dma_handle, DMA_BIDIRECTIONAL);
+	remove_page_dma_mapping(page);
 
 	update_size(mgm_dev, group_id, order, false);
 }
@@ -373,6 +508,7 @@ static int mgm_initialize_data(struct mgm_groups *mgm_data)
 		atomic_set(&mgm_data->groups[i].update_gpu_pte, 0);
 	}
 
+	init_page_dma_mapping();
 	return mgm_initialize_debugfs(mgm_data);
 }
 
@@ -390,12 +526,14 @@ static void mgm_term_data(struct mgm_groups *data)
 	}
 
 	mgm_term_debugfs(data);
+	cleanup_page_dma_mapping();
 }
 
 static int memory_group_manager_probe(struct platform_device *pdev)
 {
 	struct memory_group_manager_device *mgm_dev;
 	struct mgm_groups *mgm_data;
+	int err = 0;
 
 	mgm_dev = kzalloc(sizeof(*mgm_dev), GFP_KERNEL);
 	if (!mgm_dev)
@@ -414,6 +552,11 @@ static int memory_group_manager_probe(struct platform_device *pdev)
 		kfree(mgm_dev);
 		return -ENOMEM;
 	}
+
+	err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(40));
+
+	if (err)
+		dev_err(&pdev->dev, "dma_set_mask_and_coherent failed \n");
 
 	mgm_dev->data = mgm_data;
 	mgm_data->dev = &pdev->dev;
