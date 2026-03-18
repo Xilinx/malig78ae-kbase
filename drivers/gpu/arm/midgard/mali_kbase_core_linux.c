@@ -4598,6 +4598,7 @@ int power_control_init(struct kbase_device *kbdev)
 	struct platform_device *pdev;
 	int err = 0;
 	unsigned int i, k;
+	unsigned long rate = 0;
 #if defined(CONFIG_REGULATOR)
 	/* Regulator array must be terminated with a NULL pointer, because of how the
 	 * Linux kernel iterates through them.
@@ -4636,6 +4637,12 @@ int power_control_init(struct kbase_device *kbdev)
 			avail_regulator_names[k] = regulator_names[i];
 			/* Inc k, and init the next pointer to NULL */
 			avail_regulator_names[++k] = NULL;
+		}
+
+		/* saving mali clock in max frequency */
+		if (i == 0) {
+			rate = clk_get_rate(kbdev->clocks[i]);
+			kbdev->gpu_props.gpu_freq_khz_max = rate / 1000;
 		}
 	}
 	if (err == -EPROBE_DEFER) {
