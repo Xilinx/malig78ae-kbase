@@ -28,6 +28,7 @@
 #include <mali_kbase_reset_gpu.h>
 #include <backend/gpu/mali_kbase_jm_internal.h>
 #include <backend/gpu/mali_kbase_js_internal.h>
+#include <linux/version.h>
 #if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
 #include <mali_kbase_gpu_metrics.h>
 #endif
@@ -322,8 +323,12 @@ int kbase_backend_timer_init(struct kbase_device *kbdev)
 {
 	struct kbase_backend_data *backend = &kbdev->hwaccess.backend;
 
+#if (KERNEL_VERSION(6, 15, 0) <= LINUX_VERSION_CODE)
+	hrtimer_setup(&backend->scheduling_timer, timer_callback, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+#else
 	hrtimer_init(&backend->scheduling_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	backend->scheduling_timer.function = timer_callback;
+#endif
 	backend->timer_running = false;
 
 	return 0;

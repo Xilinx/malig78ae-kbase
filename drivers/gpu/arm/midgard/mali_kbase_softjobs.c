@@ -40,6 +40,7 @@
 #include <linux/kernel.h>
 #include <linux/cache.h>
 #include <linux/version_compat_defs.h>
+#include <linux/version.h>
 
 #if !MALI_USE_CSF
 
@@ -284,8 +285,13 @@ void kbasep_complete_triggered_soft_events(struct kbase_context *kctx, u64 evt)
 		}
 	}
 
-	if (cancel_timer)
+	if (cancel_timer) {
+#if (KERNEL_VERSION(6, 15, 0) <= LINUX_VERSION_CODE)
+		timer_delete(&kctx->soft_job_timeout);
+#else
 		del_timer(&kctx->soft_job_timeout);
+#endif
+	}
 	spin_unlock_irqrestore(&kctx->waiting_soft_jobs_lock, lflags);
 }
 

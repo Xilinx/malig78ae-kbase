@@ -30,6 +30,7 @@
 #include <mali_kbase_pm.h>
 #include <mali_kbase_config_defaults.h>
 #include <mali_kbase_smc.h>
+#include <linux/version.h>
 
 #if MALI_USE_CSF
 #include <csf/ipa_control/mali_kbase_csf_ipa_control.h>
@@ -2419,8 +2420,12 @@ int kbase_pm_state_machine_init(struct kbase_device *kbdev)
 
 	INIT_WORK(&stt->work, shader_poweroff_timer_stop_callback);
 
+#if (KERNEL_VERSION(6, 15, 0) <= LINUX_VERSION_CODE)
+	hrtimer_setup(&stt->timer, shader_tick_timer_callback, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+#else
 	hrtimer_init(&stt->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	stt->timer.function = shader_tick_timer_callback;
+#endif
 	stt->configured_interval = HR_TIMER_DELAY_NSEC(DEFAULT_PM_GPU_POWEROFF_TICK_NS);
 	stt->default_ticks = DEFAULT_PM_POWEROFF_TICK_SHADER;
 	stt->configured_ticks = stt->default_ticks;

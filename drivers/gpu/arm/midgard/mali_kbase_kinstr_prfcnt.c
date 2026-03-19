@@ -26,6 +26,7 @@
 #include <uapi/gpu/arm/midgard/mali_kbase_ioctl.h>
 #include "mali_malisw.h"
 #include "mali_kbase_debug.h"
+#include <linux/version.h>
 
 #include <linux/anon_inodes.h>
 #include <linux/fcntl.h>
@@ -1264,8 +1265,12 @@ int kbase_kinstr_prfcnt_init(struct kbase_hwcnt_virtualizer *hvirt,
 
 	mutex_init(&kinstr_ctx->lock);
 	INIT_LIST_HEAD(&kinstr_ctx->clients);
+#if (KERNEL_VERSION(6, 15, 0) <= LINUX_VERSION_CODE)
+	hrtimer_setup(&kinstr_ctx->dump_timer, kbasep_kinstr_prfcnt_dump_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+#else
 	hrtimer_init(&kinstr_ctx->dump_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	kinstr_ctx->dump_timer.function = kbasep_kinstr_prfcnt_dump_timer;
+#endif
 	INIT_WORK(&kinstr_ctx->dump_work, kbasep_kinstr_prfcnt_dump_worker);
 
 	*out_kinstr_ctx = kinstr_ctx;

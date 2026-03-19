@@ -27,6 +27,7 @@
 #include <mali_kbase_config_defaults.h>
 #include <mali_kbase_pm.h>
 #include <backend/gpu/mali_kbase_pm_internal.h>
+#include <linux/version.h>
 
 #if MALI_USE_CSF
 #include "backend/gpu/mali_kbase_clk_rate_trace_mgr.h"
@@ -137,8 +138,12 @@ int kbasep_pm_metrics_init(struct kbase_device *kbdev)
 	spin_lock_init(&kbdev->pm.backend.metrics.lock);
 
 #ifdef CONFIG_MALI_MIDGARD_DVFS
+#if (KERNEL_VERSION(6, 15, 0) <= LINUX_VERSION_CODE)
+	hrtimer_setup(&kbdev->pm.backend.metrics.timer, dvfs_callback, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+#else
 	hrtimer_init(&kbdev->pm.backend.metrics.timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	kbdev->pm.backend.metrics.timer.function = dvfs_callback;
+#endif
 	kbdev->pm.backend.metrics.initialized = true;
 	atomic_set(&kbdev->pm.backend.metrics.timer_state, TIMER_OFF);
 	kbase_pm_metrics_start(kbdev);

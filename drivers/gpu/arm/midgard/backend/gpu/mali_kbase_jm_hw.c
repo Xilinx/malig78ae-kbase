@@ -39,6 +39,7 @@
 #include <backend/gpu/mali_kbase_irq_internal.h>
 #include <backend/gpu/mali_kbase_jm_internal.h>
 #include <mali_kbase_regs_history_debugfs.h>
+#include <linux/version.h>
 
 static void kbasep_try_reset_gpu_early_locked(struct kbase_device *kbdev);
 static u64 kbasep_apply_limited_core_mask(const struct kbase_device *kbdev, const u64 affinity,
@@ -1261,8 +1262,12 @@ int kbase_reset_gpu_init(struct kbase_device *kbdev)
 
 	INIT_WORK(&kbdev->hwaccess.backend.reset_work, kbasep_reset_timeout_worker);
 
+#if (KERNEL_VERSION(6, 15, 0) <= LINUX_VERSION_CODE)
+	hrtimer_setup(&kbdev->hwaccess.backend.reset_timer, kbasep_reset_timer_callback, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+#else
 	hrtimer_init(&kbdev->hwaccess.backend.reset_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	kbdev->hwaccess.backend.reset_timer.function = kbasep_reset_timer_callback;
+#endif
 
 	return 0;
 }

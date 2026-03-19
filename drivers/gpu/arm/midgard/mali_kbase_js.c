@@ -31,6 +31,7 @@
 
 #include <mali_kbase_defs.h>
 #include <mali_kbase_config_defaults.h>
+#include <linux/version.h>
 
 #include "mali_kbase_jm.h"
 #include "mali_kbase_hwaccess_jm.h"
@@ -654,8 +655,12 @@ int kbasep_js_devdata_init(struct kbase_device *const kbdev)
 	}
 
 #if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if (KERNEL_VERSION(6, 15, 0) <= LINUX_VERSION_CODE)
+	hrtimer_setup(&jsdd->gpu_metrics_timer, gpu_metrics_timer_callback, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+#else
 	hrtimer_init(&jsdd->gpu_metrics_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	jsdd->gpu_metrics_timer.function = gpu_metrics_timer_callback;
+#endif
 	jsdd->gpu_metrics_timer_needed = false;
 	jsdd->gpu_metrics_timer_running = false;
 #endif

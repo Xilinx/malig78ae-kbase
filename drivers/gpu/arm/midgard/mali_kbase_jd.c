@@ -20,6 +20,7 @@
  */
 
 #include <linux/dma-buf.h>
+#include <linux/version.h>
 #if IS_ENABLED(CONFIG_COMPAT)
 #include <linux/compat.h>
 #endif
@@ -1477,7 +1478,11 @@ void kbase_jd_zap_context(struct kbase_context *kctx)
 	 * queued outside the job scheduler.
 	 */
 
+#if (KERNEL_VERSION(6, 15, 0) <= LINUX_VERSION_CODE)
+	timer_delete_sync(&kctx->soft_job_timeout);
+#else
 	del_timer_sync(&kctx->soft_job_timeout);
+#endif
 	list_for_each_safe(entry, tmp, &kctx->waiting_soft_jobs) {
 		katom = list_entry(entry, struct kbase_jd_atom, queue);
 		kbase_cancel_soft_job(katom);
