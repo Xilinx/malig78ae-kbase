@@ -5959,6 +5959,40 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 #undef KBASEP_DEFAULT_REGISTER_HISTORY_SIZE
 
 /**
+ * kbase_platform_device_shutdown - Shutdown callback from the OS.
+ *
+ * @pdev:  The platform device to shutdown
+ *
+ * This is called by Linux when the system is shutting down or rebooting.
+ * It ensures the GPU is properly stopped before the system powers off.
+ */
+static void kbase_platform_device_shutdown(struct platform_device *pdev)
+{
+	struct kbase_device *kbdev = to_kbase_device(&pdev->dev);
+
+	if (!kbdev)
+		return;
+
+	dev_info(kbdev->dev, "Shutting down Mali GPU\n");
+
+	/* Use the suspend path to properly stop the GPU */
+	if (kbase_pm_suspend(kbdev)) {
+		dev_warn(kbdev->dev, "Failed to suspend GPU during shutdown\n");
+	}
+
+#ifdef CONFIG_MALI_MIDGARD_DVFS
+	kbase_pm_metrics_stop(kbdev);
+#endif
+
+#ifdef CONFIG_MALI_DEVFREQ
+	if (kbdev->devfreq) {
+		kbase_devfreq_enqueue_work(kbdev, DEVFREQ_WORK_SUSPEND);
+		flush_workqueue(kbdev->devfreq_queue.workq);
+	}
+#endif
+}
+
+/**
  * kbase_device_suspend - Suspend callback from the OS.
  *
  * @dev:  The device to suspend
@@ -6163,6 +6197,7 @@ MODULE_DEVICE_TABLE(of, kbase_dt_ids);
 static struct platform_driver kbase_platform_driver = {
 	.probe = kbase_platform_device_probe,
 	.remove = kbase_platform_device_remove,
+	.shutdown = kbase_platform_device_shutdown,
 	.driver = {
 		   .name = KBASE_DRV_NAME,
 		   .pm = &kbase_pm_ops,

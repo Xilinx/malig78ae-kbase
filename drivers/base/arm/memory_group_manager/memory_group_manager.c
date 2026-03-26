@@ -529,6 +529,32 @@ static void mgm_term_data(struct mgm_groups *data)
 	cleanup_page_dma_mapping();
 }
 
+/**
+ * memory_group_manager_shutdown() - Called when system is shutting down
+ * @pdev: Platform device
+ *
+ * Perform cleanup during system shutdown to release DMA page mapping
+ * resources and leave the memory group manager in a safe state.
+ */
+static void memory_group_manager_shutdown(struct platform_device *pdev)
+{
+	struct memory_group_manager_device *mgm_dev;
+	struct mgm_groups *mgm_data;
+
+	mgm_dev = platform_get_drvdata(pdev);
+	if (!mgm_dev)
+		return;
+
+	mgm_data = mgm_dev->data;
+	if (!mgm_data)
+		return;
+
+	dev_info(&pdev->dev, "Shutting down Memory Group Manager\n");
+
+	/* Cleanup all DMA page mappings */
+	cleanup_page_dma_mapping();
+}
+
 static int memory_group_manager_probe(struct platform_device *pdev)
 {
 	struct memory_group_manager_device *mgm_dev;
@@ -603,6 +629,7 @@ MODULE_DEVICE_TABLE(of, memory_group_manager_dt_ids);
 static struct platform_driver
 	memory_group_manager_driver = { .probe = memory_group_manager_probe,
 					.remove = memory_group_manager_remove,
+					.shutdown = memory_group_manager_shutdown,
 					.driver = {
 						.name = "physical-memory-group-manager",
 						.of_match_table =
