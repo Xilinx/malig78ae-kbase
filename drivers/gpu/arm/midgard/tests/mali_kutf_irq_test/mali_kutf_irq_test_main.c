@@ -82,7 +82,7 @@ static irqreturn_t kbase_gpu_irq_custom_handler(int irq, void *data)
 	u32 test_irq = POWER_CHANGED_SINGLE;
 	u32 val = kbase_reg_read32(kbdev, status_reg_enum);
 	irqreturn_t result;
-	u64 tval;
+	u64 tval = 0;
 	bool has_test_irq = val & test_irq;
 
 
