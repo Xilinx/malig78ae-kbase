@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
+#
+# (C) COPYRIGHT 2025 ARM Limited. All rights reserved.
+#
+# This program is free software and is provided to you under the terms of the
+# GNU General Public License version 2 as published by the Free Software
+# Foundation, and any use by you of this program is subject to the terms
+# of such GNU license.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, you can access it online at
+# http://www.gnu.org/licenses/gpl-2.0.html.
+#
+#
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/arm,mali_fpga_sysctl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ARM Mali FPGA System Controller
+
+description: |
+  This binding describes the ARM Mali FPGA System Controller used in systems to enable
+  access to the protected debugging mode on certain Mali GPUs (Bifrost). A "fpga_sysctl" node
+  must be added to the device tree and must reserve the memory range required for the system
+  controller's operation.
+
+maintainers:
+  - ARM Ltd.
+
+select:
+  properties:
+    compatible:
+      contains:
+        enum:
+          - arm,mali_fpga_sysctl
+  required:
+    - compatible
+
+properties:
+  compatible:
+    items:
+      - const: arm,mali_fpga_sysctl
+
+  reg:
+    description: |
+      Memory range reserved for the system controller use.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    fpga_sysctl@6f020000 {
+        compatible = "arm,mali_fpga_sysctl";
+        reg = <0x0 0x6f020000 0x0 0x000000CC>;
+    };
+

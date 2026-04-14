@@ -1,0 +1,175 @@
+# SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
+#
+# (C) COPYRIGHT 2025 ARM Limited. All rights reserved.
+#
+# This program is free software and is provided to you under the terms of the
+# GNU General Public License version 2 as published by the Free Software
+# Foundation, and any use by you of this program is subject to the terms
+# of such GNU license.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program; if not, you can access it online at
+# http://www.gnu.org/licenses/gpl-2.0.html.
+
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/arm,mali-model-service.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Arm Model Service
+
+description: |
+  This binding describes the Arm model service used to interface kernel modules with
+  the host model service. It provides custom readl, writel, IRQ signalling, and ioremap
+  functions for accessing GPU registers through a shared memory region.
+
+  To do this it needs to reference all device nodes that will use it, but the
+  device nodes do not need to reference the model service.
+
+  Each endpoint needs to link to a remote phandle alongside an optional IRQ list
+  which is the same as the client, but matches the IRQ names defined in
+  mali_midgard_model_service_irq_types.h, for example using IRQAW0 as opposed to IRQAW.
+
+maintainers:
+  - ARM Ltd.
+
+select:
+  properties:
+    compatible:
+      contains:
+        enum:
+          - arm,mali-model-service
+  required:
+    - compatible
+
+properties:
+  compatible:
+    items:
+      - const: arm,mali-model-service
+
+  reg:
+    description: |
+      The base address and length of the memory region shared with the host model service.
+
+  base-address:
+    description: |
+      A phandle to the start of the GPU registers in memory.
+    $ref: /schemas/types.yaml#/definitions/phandle
+
+  port:
+    type: object
+    description: |
+      An object listing the endpoints that will access the GPU registers via the model service.
+    patternProperties:
+      "^endpoint(@[0-9a-f]+)?$":
+        type: object
+        description: A model service endpoint.
+        properties:
+          remote:
+            description: A phandle referencing the remote device node.
+            $ref: /schemas/types.yaml#/definitions/phandle
+
+          irq-names:
+            description: |
+              An optional array of IRQ name strings. These should match the names defined in
+              mali_midgard_model_service_irq_types.h (for example, "IRQAW0" instead of "IRQAW").
+            $ref: /schemas/types.yaml#/definitions/string-array
+        required:
+          - remote
+        additionalProperties: true
+    additionalProperties: true
+
+required:
+  - compatible
+  - reg
+  - base-address
+  - port
+
+additionalProperties: false
+
+examples:
+  # Without access windows
+  - |
+    reserved-memory {
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+
+        mali_model_service_reserved_example1: mali_model_service_reserved@80000000 {
+            no-map;
+            reg = <0x0 0x80000000 0x0 0x1000>;
+        };
+
+        mali_regs: mali_regs@80001000 {
+            no-map;
+            reg = <0x0 0x80001000 0x0 0x200000>;
+        };
+    };
+
+    mali_model_service: mali_model_service@80000000 {
+        compatible = "arm,mali-model-service";
+        reg = <0x0 0x80000000 0x0 0x1000>;
+        base-address = <&gpu_fpga>;
+
+        port {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            model_service_endpoint0: endpoint@0 {
+                remote = <&gpu_fpga>;
+                irq-names = "JOB", "MMU", "GPU";
+            };
+        };
+    };
+
+  # With access windows:
+  - |
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+
+        mali_model_service_reserved_example2: mali_model_service_reserved@80000000 {
+            no-map;
+            reg = <0x0 0x80000000 0x0 0x1000>;
+        };
+
+        mali_regs@80001000 {
+            no-map;
+            reg = <0x00 0x80001000 0x00 0x4900000>;
+            phandle = <0x1e>;
+        };
+    };
+
+    model_service@80000000 {
+        compatible = "arm,mali-model-service";
+        reg = <0x00 0x80000000 0x00 0x1000>;
+        base-address = <&gpu_fpga>;
+
+        port {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            endpoint@4 {
+                remote = <&am_aw0>;
+                irq-names = "IRQAW0";
+            };
+
+            endpoint@5 {
+                remote = <&am_aw1>;
+                irq-names = "IRQAW1";
+            };
+        };
+    };
+
+    gpu_fpga: gpu@80001000 {
+        compatible = "arm,mali-midgard";
+        reg = <0x0 0x80001000 0x0 0x200000>;
+        interrupts = <0 168 4>, <0 169 4>, <0 170 4>;
+        interrupt-names = "JOB", "MMU", "GPU";
+    };
+
