@@ -1,0 +1,22 @@
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note OR MIT */
+/*
+ * (C) COPYRIGHT 2026 AMD/Xilinx. All rights reserved.
+ */
+
+bob_kernel_module {
+    name: "mali_gpu_pm",
+    defaults: [
+        "mali_kbase_shared_config_defaults",
+    ],
+    srcs: [
+        "Kbuild",
+        "mali_gpu_pm.c",
+        "mali_gpu_pm.h",
+    ],
+    kbuild_options: [
+        "CONFIG_MALI_GPU_PM=y",
+    ],
+    add_to_alias: [
+        "kernel",
+    ],
+}

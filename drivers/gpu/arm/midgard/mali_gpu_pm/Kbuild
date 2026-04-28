@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
+#
+# (C) COPYRIGHT 2026 AMD/Xilinx. All rights reserved.
+#
+# Mali GPU PM Module - single file module
+#
+
+ifeq ($(CONFIG_MALI_GPU_PM), y)
+obj-m := mali_gpu_pm.o
+endif

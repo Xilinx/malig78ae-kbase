@@ -376,6 +376,18 @@ config MALI_TRACE_POWER_GPU_WORK_PERIOD
 
 	  If unsure, say N.
 
+config MALI_GPU_PM
+	bool "Mali GPU PM helper (ZynqMP firmware EAM / GPU SLCR)"
+	depends on MALI_MIDGARD && ZYNQMP_FIRMWARE
+	default n
+	help
+	  Build the mali_gpu_pm module, which uses the ZynqMP firmware secure
+	  PM API (zynqmp_pm_sec_read_reg / zynqmp_pm_sec_mask_write_reg) for
+	  PSXC_LPX_SLCR EAM masking and MMI_GPU_SLCR sticky clears around Mali
+	  kbase load. Requires CONFIG_ZYNQMP_FIRMWARE in the kernel.
+
+	  If unsure, say N.
+
 
 source "$(MALI_KCONFIG_EXT_PREFIX)drivers/gpu/arm/midgard/tests/Kconfig"
 
