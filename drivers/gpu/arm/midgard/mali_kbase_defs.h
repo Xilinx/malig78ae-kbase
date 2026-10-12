@@ -780,6 +780,11 @@ struct kbase_mem_migrate {
  * @clocks:                Pointer to the input clock resources referenced by
  *                         the GPU device node.
  * @nr_clocks:             Number of clocks set in the clocks array.
+ * @clocks_enabled:        True while kbase holds its own prepare/enable
+ *                         reference on @clocks. Clocks may be shared with
+ *                         other consumers, so the hardware enable state
+ *                         cannot be used to decide whether to drop it.
+ * @clocks_lock:           Serialises updates of @clocks_enabled.
  * @regulators:            Pointer to the structs corresponding to the
  *                         regulators referenced by the GPU device node.
  * @nr_regulators:         Number of regulators set in the regulators array.
@@ -1105,6 +1110,9 @@ struct kbase_device {
 
 	struct clk *clocks[BASE_MAX_NR_CLOCKS_REGULATORS];
 	unsigned int nr_clocks;
+	bool clocks_enabled;
+	/* Protects clocks_enabled */
+	struct mutex clocks_lock;
 #if IS_ENABLED(CONFIG_REGULATOR)
 	struct regulator *regulators[BASE_MAX_NR_CLOCKS_REGULATORS];
 	unsigned int nr_regulators;

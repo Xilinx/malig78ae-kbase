@@ -25,10 +25,16 @@
 #include <linux/pm_runtime.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/mutex.h>
 #include <linux/regulator/consumer.h>
 
 #include "mali_kbase_config_platform.h"
 
+/*
+ * power_suspend and runtime suspend can both reach the disable path, and
+ * power_resume and runtime resume can both reach the enable path, so
+ * kbdev->clocks_enabled tracks the reference kbase itself holds.
+ */
 static void enable_gpu_power_control(struct kbase_device *kbdev)
 {
 	unsigned int i;
@@ -42,26 +48,40 @@ static void enable_gpu_power_control(struct kbase_device *kbdev)
 	}
 #endif
 
+	mutex_lock(&kbdev->clocks_lock);
+	if (kbdev->clocks_enabled)
+		goto unlock;
+
 	for (i = 0; i < kbdev->nr_clocks; i++) {
 		if (WARN_ON(kbdev->clocks[i] == NULL))
-			;
-		else if (!__clk_is_enabled(kbdev->clocks[i]))
-			WARN_ON(clk_prepare_enable(kbdev->clocks[i]));
+			continue;
+		if (WARN_ON(clk_prepare_enable(kbdev->clocks[i]))) {
+			while (i--) {
+				if (kbdev->clocks[i])
+					clk_disable_unprepare(kbdev->clocks[i]);
+			}
+			goto unlock;
+		}
 	}
+	kbdev->clocks_enabled = true;
+unlock:
+	mutex_unlock(&kbdev->clocks_lock);
 }
 
 static void disable_gpu_power_control(struct kbase_device *kbdev)
 {
 	unsigned int i;
 
-	for (i = 0; i < kbdev->nr_clocks; i++) {
-		if (WARN_ON(kbdev->clocks[i] == NULL))
-			;
-		else if (__clk_is_enabled(kbdev->clocks[i])) {
+	mutex_lock(&kbdev->clocks_lock);
+	if (kbdev->clocks_enabled) {
+		for (i = 0; i < kbdev->nr_clocks; i++) {
+			if (WARN_ON(!kbdev->clocks[i]))
+				continue;
 			clk_disable_unprepare(kbdev->clocks[i]);
-			WARN_ON(__clk_is_enabled(kbdev->clocks[i]));
 		}
+		kbdev->clocks_enabled = false;
 	}
+	mutex_unlock(&kbdev->clocks_lock);
 
 #if defined(CONFIG_REGULATOR)
 	for (i = 0; i < kbdev->nr_regulators; i++) {

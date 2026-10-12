@@ -71,7 +71,12 @@ static unsigned int kbase_dev_nr;
 
 struct kbase_device *kbase_device_alloc(void)
 {
-	return vzalloc(sizeof(struct kbase_device));
+	struct kbase_device *kbdev = vzalloc(sizeof(*kbdev));
+
+	if (kbdev)
+		mutex_init(&kbdev->clocks_lock);
+
+	return kbdev;
 }
 
 /**

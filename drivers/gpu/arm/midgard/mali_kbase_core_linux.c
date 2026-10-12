@@ -4677,6 +4677,7 @@ int power_control_init(struct kbase_device *kbdev)
 		if (err) {
 			dev_err(kbdev->dev, "Failed to prepare and enable clock (%d)\n", err);
 			clk_put(kbdev->clocks[i]);
+			kbdev->clocks[i] = NULL;
 			break;
 		}
 	}
@@ -4690,6 +4691,7 @@ int power_control_init(struct kbase_device *kbdev)
 	}
 
 	kbdev->nr_clocks = i;
+	kbdev->clocks_enabled = true;
 	dev_dbg(&pdev->dev, "Clocks probed: %u\n", kbdev->nr_clocks);
 
 	/* Any error in parsing the OPP table from the device file
@@ -4730,13 +4732,14 @@ int power_control_init(struct kbase_device *kbdev)
 regulators_probe_defer:
 	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
 		if (kbdev->clocks[i]) {
-			if (__clk_is_enabled(kbdev->clocks[i]))
-				clk_disable_unprepare(kbdev->clocks[i]);
+			clk_disable_unprepare(kbdev->clocks[i]);
 			clk_put(kbdev->clocks[i]);
 			kbdev->clocks[i] = NULL;
 		} else
 			break;
 	}
+	kbdev->nr_clocks = 0;
+	kbdev->clocks_enabled = false;
 #endif
 
 clocks_probe_defer:
@@ -4765,15 +4768,19 @@ void power_control_term(struct kbase_device *kbdev)
 #endif /* CONFIG_REGULATOR */
 #endif /* CONFIG_PM_OPP */
 
+	mutex_lock(&kbdev->clocks_lock);
 	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
 		if (kbdev->clocks[i]) {
-			if (__clk_is_enabled(kbdev->clocks[i]))
+			if (kbdev->clocks_enabled)
 				clk_disable_unprepare(kbdev->clocks[i]);
 			clk_put(kbdev->clocks[i]);
 			kbdev->clocks[i] = NULL;
 		} else
 			break;
 	}
+	kbdev->nr_clocks = 0;
+	kbdev->clocks_enabled = false;
+	mutex_unlock(&kbdev->clocks_lock);
 
 #if defined(CONFIG_OF) && defined(CONFIG_REGULATOR)
 	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
