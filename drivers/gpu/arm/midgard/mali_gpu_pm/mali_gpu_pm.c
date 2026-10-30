@@ -15,14 +15,20 @@
 #include <linux/mutex.h>
 #include <linux/string.h>
 #include <linux/delay.h>
+#include <linux/ktime.h>
 #include <linux/firmware/xlnx-zynqmp.h>
 
 #include "mali_gpu_pm.h"
 
 #define DRV_NAME	"mali_gpu_pm"
 #define KBASE_NAME	"mali"
-#define SLCR_CLEAR_MAX_RETRIES	5
-#define SLCR_RETRY_DELAY_US	100
+/*
+ * The SLCR status bits cannot be cleared while a PTM message is unread, so
+ * retry with a doubling sleep until SLCR_CLEAR_TIMEOUT_US; may sleep.
+ */
+#define SLCR_CLEAR_TIMEOUT_US	250000
+#define SLCR_RETRY_DELAY_US	100U
+#define SLCR_RETRY_MAX_DELAY_US	10000U
 #define SLCR_SETTLE_RECHECK_US	100
 
 /* State variables */
@@ -92,13 +98,19 @@ static int unmask_pmc_register(void)
 	return 0;
 }
 
-static int clear_single_slcr_register(u32 offset)
+static int clear_single_slcr_register(u32 offset, ktime_t deadline)
 {
-	unsigned int retry = 0;
+	unsigned int delay_us = SLCR_RETRY_DELAY_US;
+	unsigned int tries = 0;
 	u32 value = 0, verify = 0;
 	int ret = 0;
 
-	for (retry = 0; retry < SLCR_CLEAR_MAX_RETRIES; retry++) {
+	do {
+		if (tries) {
+			fsleep(delay_us);
+			delay_us = min(delay_us * 2, SLCR_RETRY_MAX_DELAY_US);
+		}
+
 		ret = zynqmp_pm_sec_read_reg(PM_REG_MMI_GPU_SLCR, offset, &value);
 		if (ret) {
 			pr_err("%s: zynqmp_pm_sec_read_reg(0x%x) failed: %d\n",
@@ -109,6 +121,7 @@ static int clear_single_slcr_register(u32 offset)
 		if (!value)
 			return 0;
 
+		tries++;
 		ret = zynqmp_pm_sec_mask_write_reg(PM_REG_MMI_GPU_SLCR, offset,
 						   GENMASK(31, 0), value);
 		if (ret) {
@@ -137,24 +150,23 @@ static int clear_single_slcr_register(u32 offset)
 			if (!verify)
 				return 0;
 		}
+	} while (ktime_before(ktime_get(), deadline));
 
-		udelay(SLCR_RETRY_DELAY_US);
-	}
-
-	pr_err("%s: SLCR+0x%x failed to clear after %d retries\n",
-	       DRV_NAME, offset, SLCR_CLEAR_MAX_RETRIES);
+	pr_err("%s: SLCR+0x%x failed to clear (0x%x) after %u tries\n",
+	       DRV_NAME, offset, verify, tries);
 	return -EIO;
 }
 
 static int clear_slcr_registers(void)
 {
+	ktime_t deadline = ktime_add_us(ktime_get(), SLCR_CLEAR_TIMEOUT_US);
 	unsigned int i = 0;
 	int ret = 0, err = 0;
 
 	pr_debug("%s: clear_slcr_registers() - start\n", DRV_NAME);
 
 	for (i = 0; i < ARRAY_SIZE(slcr_offsets); i++) {
-		ret = clear_single_slcr_register(slcr_offsets[i]);
+		ret = clear_single_slcr_register(slcr_offsets[i], deadline);
 		if (ret && !err)
 			err = ret;
 	}
